@@ -2,11 +2,12 @@ import streamlit as st
 
 st.set_page_config(page_title="CNT4603 Visitor Setup Guide", page_icon="🐧", layout="wide")
 
-st.title("🐧 CNT4603 Visitor Setup — Complete Arch Linux Guide")
-st.caption("Every command you need, in order. Just copy and paste into your Arch terminal.")
+st.title("🐧 CNT4603 Visitor Setup — Arch Linux Lab Guide")
+st.caption("School lab computer (host) + QEMU guest VM. All paste happens as user0 in the host GUI terminal.")
 
 st.sidebar.header("📋 All Steps")
 st.sidebar.markdown("""
+**HOST MACHINE SETUP**
 - [Step 0: Install Dependencies](#step-0-install-dependencies)
 - [Step 1: Create Working Directory](#step-1-create-working-directory)
 - [Step 2: Create newusers.txt](#step-2-create-newusers-txt)
@@ -16,17 +17,37 @@ st.sidebar.markdown("""
 - [Step 6: Create remove_visitors.sh](#step-6-create-remove-visitors-sh)
 - [Step 7: Make Scripts Executable](#step-7-make-all-scripts-executable)
 - [Step 8: Generate SSH Host Keys](#step-8-generate-ssh-host-keys-arch-requirement)
-- [Step 9: Enable sshd Service](#step-9-enable-and-start-sshd)
+- [Step 9: Enable sshd](#step-9-enable-and-start-sshd)
 - [Step 10: Configure sshd_config](#step-10-configure-sshd-config)
 - [Step 11: Restart sshd](#step-11-restart-sshd)
-- [Step 12: Generate Test Keypair](#step-12-generate-test-keypair)
-- [Step 13: Run Main Script](#step-13-run-the-main-script)
+- [Step 12: Run Main Script](#step-12-run-the-main-script)
+- [Step 13: Generate Test Keypair](#step-13-generate-test-keypair)
 - [Step 14: Install Test Key](#step-14-install-testuser-key)
-- [Step 15: Test SSH Login](#step-15-test-ssh-login)
-- [Step 16: Verify All Users](#step-16-verify-all-users)
-- [Step 17: Repeat on Guest](#step-17-repeat-on-guest-machine)
-- [Step 18: Cleanup (if needed)](#step-18-cleanup-if-you-need-to-redo)
+- [Step 15: Verify All Users](#step-15-verify-all-users)
+- [Step 16: Find Host IP](#step-16-find-host-ip-for-ssh-test)
+
+**SSH TEST FROM QEMU GUEST**
+- [Step 17: Test SSH from Guest](#step-17-test-ssh-from-qemu-guest-into-host)
+
+**GUEST VM SETUP**
+- [Step 18: Set Up Guest VM](#step-18-set-up-guest-vm)
+- [Step 19: Cleanup (if needed)](#step-19-cleanup-if-you-need-to-redo)
 """)
+
+st.divider()
+st.info("""💡 **YOUR LAB SETUP:**
+- **Host** = school lab computer running Arch Linux (has root via sudo, has Firefox for paste)
+- **Guest** = QEMU virtual machine running Arch Linux
+- You paste commands from Firefox into the **host** terminal as **user0**, using `sudo` for root commands
+- SSH test = from the **QEMU guest** into the **host**""")
+
+st.divider()
+
+# ════════════════════════════════════════════════════════════════
+# HOST MACHINE SETUP
+# ════════════════════════════════════════════════════════════════
+
+st.subheader("═══ HOST MACHINE SETUP ═══")
 
 st.divider()
 
@@ -34,9 +55,9 @@ st.divider()
 # STEP 0
 # ════════════════════════════════════════════
 st.header("Step 0: Install Dependencies")
-st.write("Log in as **root** on your Arch machine and run:")
-st.code("pacman -Syu", language="bash")
-st.code("pacman -S --needed wget openssh zsh", language="bash")
+st.write("Open a terminal on the **host** as **user0** and run:")
+st.code("sudo pacman -Syu", language="bash")
+st.code("sudo pacman -S --needed wget openssh zsh", language="bash")
 
 st.divider()
 
@@ -44,9 +65,10 @@ st.divider()
 # STEP 1
 # ════════════════════════════════════════════
 st.header("Step 1: Create Working Directory")
-st.code("mkdir -p /root/visitors", language="bash")
-st.code("cd /root/visitors", language="bash")
-st.warning("⚠️ Run **ALL** remaining steps from inside `/root/visitors/`")
+st.write("As **user0** on the host:")
+st.code("mkdir -p ~/visitors", language="bash")
+st.code("cd ~/visitors", language="bash")
+st.warning("⚠️ Run **ALL** remaining host steps from inside `~/visitors/`")
 
 st.divider()
 
@@ -54,8 +76,8 @@ st.divider()
 # STEP 2
 # ════════════════════════════════════════════
 st.header("Step 2: Create newusers.txt")
-st.write("This creates the file with all 68 real users + testuser (uid 5099):")
-st.code("""cat > /root/visitors/newusers.txt << 'EOF'
+st.write("As **user0** on the host, paste this entire block:")
+st.code("""cat > ~/visitors/newusers.txt << 'EOF'
 adams:5000:Adams, John Couch:/bin/bash
 atiyah:5001:Atiyah, Michael:/bin/zsh
 babbage:5002:Babbage, Charles:/bin/zsh
@@ -128,9 +150,8 @@ testuser:5099:Test User, SSH Verification:/bin/bash
 EOF""", language="bash")
 
 st.write("Verify it was created:")
-st.code("cat /root/visitors/newusers.txt", language="bash")
-st.code("wc -l /root/visitors/newusers.txt", language="bash")
-st.info("You should see **69 lines** (68 real users + 1 testuser).")
+st.code("wc -l ~/visitors/newusers.txt", language="bash")
+st.info("You should see **69** (68 real users + 1 testuser).")
 
 st.divider()
 
@@ -138,8 +159,8 @@ st.divider()
 # STEP 3
 # ════════════════════════════════════════════
 st.header("Step 3: Create add_visitors.sh")
-st.write("This is the **main script**. It creates users, groups, home dirs under `/home/visitors/`, downloads pubkeys, sets SSH perms, and creates `/scratch/` dirs.")
-st.code(r"""cat > /root/visitors/add_visitors.sh << 'SCRIPTEOF'
+st.write("As **user0** on the host, paste this entire block:")
+st.code(r"""cat > ~/visitors/add_visitors.sh << 'SCRIPTEOF'
 #!/bin/bash
 set -euo pipefail
 
@@ -160,7 +181,6 @@ fi
 mkdir -p /home/visitors
 mkdir -p /scratch
 
-# Arch: generate SSH host keys if missing
 if [[ ! -f /etc/ssh/ssh_host_rsa_key ]]; then
     echo ">>> Generating SSH host keys (Arch requirement)..."
     ssh-keygen -A
@@ -193,10 +213,8 @@ while IFS=: read -r name uid gecos shell; do
         continue
     fi
 
-    # Create group (gid == uid)
     groupadd -g "$uid" "$name"
 
-    # Create user with home under /home/visitors/
     useradd \
         -u "$uid" \
         -g "$name" \
@@ -207,19 +225,15 @@ while IFS=: read -r name uid gecos shell; do
         -c "$gecos" \
         "$name"
 
-    # Lock password
     passwd -l "$name" 2>/dev/null || true
 
-    # Home dir perms (SSH needs 700, owned by user)
     chown "$name":"$name" "$HOMEDIR"
     chmod 700 "$HOMEDIR"
 
-    # .ssh dir (SSH needs 700, owned by user)
     mkdir -p "${HOMEDIR}/.ssh"
     chown "$name":"$name" "${HOMEDIR}/.ssh"
     chmod 700 "${HOMEDIR}/.ssh"
 
-    # Download pubkey
     PUBKEY_FILE="${PUBKEY_URL}${name}.pub"
     echo "  Fetching: $PUBKEY_FILE"
     if wget -q -O "${HOMEDIR}/.ssh/authorized_keys" "$PUBKEY_FILE" 2>/dev/null; then
@@ -229,11 +243,9 @@ while IFS=: read -r name uid gecos shell; do
         touch "${HOMEDIR}/.ssh/authorized_keys"
     fi
 
-    # authorized_keys perms (SSH needs 600, owned by user)
     chown "$name":"$name" "${HOMEDIR}/.ssh/authorized_keys"
     chmod 600 "${HOMEDIR}/.ssh/authorized_keys"
 
-    # /scratch dir
     mkdir -p "$SCRATCHDIR"
     chown "$name":"$name" "$SCRATCHDIR"
     chmod 700 "$SCRATCHDIR"
@@ -245,11 +257,6 @@ done < "$USERFILE"
 echo "============================================"
 echo "ALL USERS PROCESSED."
 echo "============================================"
-echo "Permissions set:"
-echo "  /home/visitors/USER/                 -> 700 user:user"
-echo "  /home/visitors/USER/.ssh/            -> 700 user:user"
-echo "  /home/visitors/USER/.ssh/authorized_keys -> 600 user:user"
-echo "  /scratch/USER/                       -> 700 user:user"
 SCRIPTEOF""", language="bash")
 
 st.divider()
@@ -258,8 +265,8 @@ st.divider()
 # STEP 4
 # ════════════════════════════════════════════
 st.header("Step 4: Create setup_testuser.sh")
-st.write("This script generates an SSH keypair for testuser so you have the private key to test login.")
-st.code(r"""cat > /root/visitors/setup_testuser.sh << 'SCRIPTEOF'
+st.write("As **user0** on the host, paste:")
+st.code(r"""cat > ~/visitors/setup_testuser.sh << 'SCRIPTEOF'
 #!/bin/bash
 set -euo pipefail
 KEYDIR="$HOME/testkeys"
@@ -274,13 +281,6 @@ echo "  Private: ${KEYDIR}/testuser_key"
 echo "  Public:  ${KEYDIR}/testuser_key.pub"
 echo ""
 cat "${KEYDIR}/testuser_key.pub"
-echo ""
-echo "After add_visitors.sh, install key with:"
-echo "  sudo cp ${KEYDIR}/testuser_key.pub /home/visitors/testuser/.ssh/authorized_keys"
-echo "  sudo chown testuser:testuser /home/visitors/testuser/.ssh/authorized_keys"
-echo "  sudo chmod 600 /home/visitors/testuser/.ssh/authorized_keys"
-echo ""
-echo "Then test: ssh -i ${KEYDIR}/testuser_key testuser@localhost"
 SCRIPTEOF""", language="bash")
 
 st.divider()
@@ -289,8 +289,8 @@ st.divider()
 # STEP 5
 # ════════════════════════════════════════════
 st.header("Step 5: Create verify_users.sh")
-st.write("This checks every user's uid, gid, home dir permissions, `.ssh` permissions, `authorized_keys`, and `/scratch` dir.")
-st.code(r"""cat > /root/visitors/verify_users.sh << 'SCRIPTEOF'
+st.write("As **user0** on the host, paste:")
+st.code(r"""cat > ~/visitors/verify_users.sh << 'SCRIPTEOF'
 #!/bin/bash
 set -uo pipefail
 if [[ $# -ne 1 ]]; then echo "Usage: $0 <userfile>"; exit 1; fi
@@ -341,8 +341,8 @@ st.divider()
 # STEP 6
 # ════════════════════════════════════════════
 st.header("Step 6: Create remove_visitors.sh")
-st.write("Cleanup script in case you need to start over.")
-st.code(r"""cat > /root/visitors/remove_visitors.sh << 'SCRIPTEOF'
+st.write("As **user0** on the host, paste:")
+st.code(r"""cat > ~/visitors/remove_visitors.sh << 'SCRIPTEOF'
 #!/bin/bash
 set -uo pipefail
 if [[ $# -ne 1 ]]; then echo "Usage: $0 <userfile>"; exit 1; fi
@@ -365,14 +365,14 @@ st.divider()
 # STEP 7
 # ════════════════════════════════════════════
 st.header("Step 7: Make All Scripts Executable")
-st.code("""chmod +x /root/visitors/add_visitors.sh
-chmod +x /root/visitors/setup_testuser.sh
-chmod +x /root/visitors/verify_users.sh
-chmod +x /root/visitors/remove_visitors.sh""", language="bash")
+st.write("As **user0** on the host:")
+st.code("chmod +x ~/visitors/add_visitors.sh", language="bash")
+st.code("chmod +x ~/visitors/setup_testuser.sh", language="bash")
+st.code("chmod +x ~/visitors/verify_users.sh", language="bash")
+st.code("chmod +x ~/visitors/remove_visitors.sh", language="bash")
 
-st.write("Verify they are all there:")
-st.code("ls -la /root/visitors/", language="bash")
-st.info("You should see: `add_visitors.sh`, `setup_testuser.sh`, `verify_users.sh`, `remove_visitors.sh`, and `newusers.txt`")
+st.write("Verify:")
+st.code("ls -la ~/visitors/", language="bash")
 
 st.divider()
 
@@ -380,12 +380,12 @@ st.divider()
 # STEP 8
 # ════════════════════════════════════════════
 st.header("Step 8: Generate SSH Host Keys (Arch Requirement)")
-st.error("🔴 This is **required on Arch Linux** before sshd works. Run as root:")
-st.code("ssh-keygen -A", language="bash")
+st.error("🔴 Required on Arch Linux before sshd works.")
+st.write("As **user0** on the host:")
+st.code("sudo ssh-keygen -A", language="bash")
 
-st.write("Verify keys were created:")
+st.write("Verify:")
 st.code("ls -la /etc/ssh/ssh_host_*", language="bash")
-st.info("You should see several key files like `ssh_host_rsa_key`, `ssh_host_ed25519_key`, etc.")
 
 st.divider()
 
@@ -393,12 +393,11 @@ st.divider()
 # STEP 9
 # ════════════════════════════════════════════
 st.header("Step 9: Enable and Start sshd")
-st.code("systemctl enable sshd", language="bash")
-st.code("systemctl start sshd", language="bash")
-
-st.write("Check it's running:")
-st.code("systemctl status sshd", language="bash")
-st.success("You should see **active (running)** in green.")
+st.write("As **user0** on the host:")
+st.code("sudo systemctl enable sshd", language="bash")
+st.code("sudo systemctl start sshd", language="bash")
+st.code("sudo systemctl status sshd", language="bash")
+st.success("You should see **active (running)**.")
 
 st.divider()
 
@@ -406,18 +405,18 @@ st.divider()
 # STEP 10
 # ════════════════════════════════════════════
 st.header("Step 10: Configure sshd_config")
-st.write("Make sure PubkeyAuthentication is enabled:")
+st.write("As **user0** on the host, check current setting:")
 st.code("grep -i 'PubkeyAuthentication' /etc/ssh/sshd_config", language="bash")
 
-st.write("If it shows `#PubkeyAuthentication yes` or `PubkeyAuthentication no` or nothing, fix it:")
-st.code("sed -i 's/^#*PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config", language="bash")
+st.write("Fix it (works whether it's commented out or set to no):")
+st.code("sudo sed -i 's/^#*PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config", language="bash")
 
 st.write("If grep showed **nothing at all**, add it:")
-st.code('echo "PubkeyAuthentication yes" >> /etc/ssh/sshd_config', language="bash")
+st.code('echo "PubkeyAuthentication yes" | sudo tee -a /etc/ssh/sshd_config', language="bash")
 
-st.write("Verify the fix:")
+st.write("Verify:")
 st.code("grep -i 'PubkeyAuthentication' /etc/ssh/sshd_config", language="bash")
-st.success("You should see: `PubkeyAuthentication yes`")
+st.success("Should show: `PubkeyAuthentication yes`")
 
 st.divider()
 
@@ -425,50 +424,26 @@ st.divider()
 # STEP 11
 # ════════════════════════════════════════════
 st.header("Step 11: Restart sshd")
-st.write("Apply the config changes:")
-st.code("systemctl restart sshd", language="bash")
-
-st.write("Confirm it's still running:")
-st.code("systemctl status sshd", language="bash")
+st.write("As **user0** on the host:")
+st.code("sudo systemctl restart sshd", language="bash")
+st.code("sudo systemctl status sshd", language="bash")
 
 st.divider()
 
 # ════════════════════════════════════════════
 # STEP 12
 # ════════════════════════════════════════════
-st.header("Step 12: Generate Test Keypair")
-st.warning("⚠️ **Switch to your normal user (user0 or user1) for this step. NOT root.**")
+st.header("Step 12: Run the Main Script")
+st.error("🔴 This creates all 69 user accounts on the **host**.")
+st.write("As **user0** on the host:")
+st.code("cd ~/visitors", language="bash")
+st.code("sudo bash ~/visitors/add_visitors.sh ~/visitors/newusers.txt https://www.cs.fsu.edu/~langley/NEWKEYS/", language="bash")
 
-st.write("If you are root, switch user first:")
-st.code("su - user0", language="bash")
-
-st.write("Then run the setup script:")
-st.code("bash /root/visitors/setup_testuser.sh", language="bash")
-
-st.write("If you get a **permission denied** error, copy the script first:")
-st.code("""cp /root/visitors/setup_testuser.sh /tmp/
-bash /tmp/setup_testuser.sh""", language="bash")
-
-st.info("This creates `~/testkeys/testuser_key` (private) and `~/testkeys/testuser_key.pub` (public). **Remember which user you ran this as** — you need the path in step 14.")
-
-st.write("Switch back to root when done:")
-st.code("exit", language="bash")
-
-st.divider()
-
-# ════════════════════════════════════════════
-# STEP 13
-# ════════════════════════════════════════════
-st.header("Step 13: Run the Main Script")
-st.error("🔴 Run as **root**. This creates all 69 user accounts.")
-st.code("cd /root/visitors", language="bash")
-st.code("bash add_visitors.sh newusers.txt https://www.cs.fsu.edu/~langley/NEWKEYS/", language="bash")
-
-st.write("This will take a minute. Watch the output:")
+st.write("Watch the output:")
 st.write("- **SUCCESS: Pubkey installed** = user had a pubkey on the server")
 st.write("- **NOTICE: No pubkey for X** = user didn't provide one (expected per assignment)")
 
-st.write("When done, spot-check a few users:")
+st.write("Spot-check a few users:")
 st.code("id adams", language="bash")
 st.code("id turing", language="bash")
 st.code("id testuser", language="bash")
@@ -479,24 +454,30 @@ st.code("ls -la /scratch/adams/", language="bash")
 st.divider()
 
 # ════════════════════════════════════════════
+# STEP 13
+# ════════════════════════════════════════════
+st.header("Step 13: Generate Test Keypair")
+st.write("As **user0** on the host (no sudo — keys go in your home dir):")
+st.code("bash ~/visitors/setup_testuser.sh", language="bash")
+
+st.write("Verify keys exist:")
+st.code("ls -la ~/testkeys/", language="bash")
+st.info("`testuser_key` = private key, `testuser_key.pub` = public key")
+
+st.divider()
+
+# ════════════════════════════════════════════
 # STEP 14
 # ════════════════════════════════════════════
 st.header("Step 14: Install testuser Key")
-st.write("Since `testuser.pub` doesn't exist on the professor's server, manually install the key you generated in step 12.")
+st.write("As **user0** on the host, install the public key into testuser's account:")
+st.code("sudo cp ~/testkeys/testuser_key.pub /home/visitors/testuser/.ssh/authorized_keys", language="bash")
+st.code("sudo chown testuser:testuser /home/visitors/testuser/.ssh/authorized_keys", language="bash")
+st.code("sudo chmod 600 /home/visitors/testuser/.ssh/authorized_keys", language="bash")
 
-st.write("**If you ran setup_testuser.sh as user0:**")
-st.code("""cp /home/user0/testkeys/testuser_key.pub /home/visitors/testuser/.ssh/authorized_keys
-chown testuser:testuser /home/visitors/testuser/.ssh/authorized_keys
-chmod 600 /home/visitors/testuser/.ssh/authorized_keys""", language="bash")
-
-st.write("**If you ran setup_testuser.sh as user1:**")
-st.code("""cp /home/user1/testkeys/testuser_key.pub /home/visitors/testuser/.ssh/authorized_keys
-chown testuser:testuser /home/visitors/testuser/.ssh/authorized_keys
-chmod 600 /home/visitors/testuser/.ssh/authorized_keys""", language="bash")
-
-st.write("Verify the key is installed:")
-st.code("cat /home/visitors/testuser/.ssh/authorized_keys", language="bash")
-st.code("stat -c '%a %U:%G' /home/visitors/testuser/.ssh/authorized_keys", language="bash")
+st.write("Verify:")
+st.code("sudo cat /home/visitors/testuser/.ssh/authorized_keys", language="bash")
+st.code("sudo stat -c '%a %U:%G' /home/visitors/testuser/.ssh/authorized_keys", language="bash")
 st.success("Should show: `600 testuser:testuser`")
 
 st.divider()
@@ -504,17 +485,61 @@ st.divider()
 # ════════════════════════════════════════════
 # STEP 15
 # ════════════════════════════════════════════
-st.header("Step 15: Test SSH Login")
-st.warning("⚠️ **Switch to your normal user (user0 or user1) — whichever one has the private key.**")
+st.header("Step 15: Verify All Users")
+st.write("As **user0** on the host:")
+st.code("sudo bash ~/visitors/verify_users.sh ~/visitors/newusers.txt", language="bash")
 
-st.code("su - user0", language="bash")
+st.write("What the output means:")
+st.write("- **OK** = check passed")
+st.write("- **WARN: ak empty** = no pubkey on the server (expected for some users)")
+st.write("- **FAIL** = fix it")
+st.write("- **ALL CHECKS PASSED** = you're good!")
 
-st.write("SSH into testuser using the private key:")
+st.divider()
+
+# ════════════════════════════════════════════
+# STEP 16
+# ════════════════════════════════════════════
+st.header("Step 16: Find Host IP for SSH Test")
+st.write("On the **host**, find the IP address the QEMU guest can reach:")
+st.code("ip addr show", language="bash")
+st.info("Look for an IP on your network interface (e.g. `192.168.x.x` or `10.0.x.x`). Write it down — you'll need it in the next step.")
+
+st.write("Also test SSH works locally on the host first:")
 st.code("ssh -i ~/testkeys/testuser_key testuser@localhost", language="bash")
+st.write("If it asks about the fingerprint, type **yes**. You should get a shell without a password.")
+st.write("Once verified, type:")
+st.code("exit", language="bash")
 
-st.write("If it asks about the host fingerprint, type **yes** and press Enter.")
+st.divider()
+
+# ════════════════════════════════════════════════════════════════
+# SSH TEST FROM QEMU GUEST
+# ════════════════════════════════════════════════════════════════
+
+st.subheader("═══ SSH TEST FROM QEMU GUEST ═══")
+
+st.divider()
+
+# ════════════════════════════════════════════
+# STEP 17
+# ════════════════════════════════════════════
+st.header("Step 17: Test SSH from QEMU Guest into Host")
+st.write("First, you need to get the testuser private key onto the QEMU guest. From the **host** as **user0**:")
 st.write("")
-st.write("Once logged in, run these commands to verify everything:")
+st.write("**Option A: SCP the key from host to guest** (if guest has sshd running):")
+st.code("scp ~/testkeys/testuser_key user0@GUEST_IP:/home/user0/testuser_key", language="bash")
+
+st.write("**Option B: If guest doesn't have sshd yet**, use a shared folder or manually type the key.")
+st.write("")
+st.write("Once the private key is on the **guest**, open a terminal on the guest and run:")
+st.code("chmod 600 ~/testuser_key", language="bash")
+st.code("ssh -i ~/testuser_key testuser@HOST_IP", language="bash")
+st.warning("⚠️ Replace `HOST_IP` with the actual IP you found in Step 16.")
+
+st.write("If it asks about the fingerprint, type **yes**.")
+st.write("")
+st.write("Once logged in, verify everything:")
 st.code("whoami", language="bash")
 st.code("id", language="bash")
 st.code("pwd", language="bash")
@@ -523,116 +548,87 @@ st.code("ls -la ~/.ssh", language="bash")
 st.code("ls -la ~/.ssh/authorized_keys", language="bash")
 st.code("ls -la /scratch/testuser", language="bash")
 
-st.success("✅ If you got a shell as `testuser` **without being asked for a password**, SSH pubkey auth is working!")
+st.success("✅ If you got a shell as `testuser` **without a password prompt**, SSH pubkey auth is working!")
 
-st.write("Exit the testuser session:")
-st.code("exit", language="bash")
-
-st.write("Exit back to root:")
 st.code("exit", language="bash")
 
 st.write("---")
-st.write("**🔧 TROUBLESHOOTING — If SSH login fails:**")
+st.write("**🔧 TROUBLESHOOTING — If SSH from guest fails:**")
 
-st.write("Run SSH with verbose output:")
-st.code("ssh -vvv -i ~/testkeys/testuser_key testuser@localhost", language="bash")
+st.write("On the **guest**, run SSH with verbose output:")
+st.code("ssh -vvv -i ~/testuser_key testuser@HOST_IP", language="bash")
 
-st.write("Check sshd logs:")
-st.code("journalctl -u sshd -e", language="bash")
+st.write("On the **host**, check sshd logs:")
+st.code("sudo journalctl -u sshd -e", language="bash")
 
-st.write("Check all permissions (as root):")
-st.code("""stat -c '%a %U:%G %n' /home/visitors/testuser
-stat -c '%a %U:%G %n' /home/visitors/testuser/.ssh
-stat -c '%a %U:%G %n' /home/visitors/testuser/.ssh/authorized_keys""", language="bash")
-st.info("""Expected output:
+st.write("On the **host**, check all permissions:")
+st.code("sudo stat -c '%a %U:%G %n' /home/visitors/testuser", language="bash")
+st.code("sudo stat -c '%a %U:%G %n' /home/visitors/testuser/.ssh", language="bash")
+st.code("sudo stat -c '%a %U:%G %n' /home/visitors/testuser/.ssh/authorized_keys", language="bash")
+
+st.info("""Expected:
 `700 testuser:testuser /home/visitors/testuser`
 `700 testuser:testuser /home/visitors/testuser/.ssh`
 `600 testuser:testuser /home/visitors/testuser/.ssh/authorized_keys`""")
 
-st.write("If permissions are wrong, fix them:")
-st.code("""chown testuser:testuser /home/visitors/testuser
-chmod 700 /home/visitors/testuser
-chown testuser:testuser /home/visitors/testuser/.ssh
-chmod 700 /home/visitors/testuser/.ssh
-chown testuser:testuser /home/visitors/testuser/.ssh/authorized_keys
-chmod 600 /home/visitors/testuser/.ssh/authorized_keys""", language="bash")
-
-st.write("Then restart sshd and try again:")
-st.code("systemctl restart sshd", language="bash")
+st.write("If permissions are wrong, fix them on the **host**:")
+st.code("sudo chown testuser:testuser /home/visitors/testuser", language="bash")
+st.code("sudo chmod 700 /home/visitors/testuser", language="bash")
+st.code("sudo chown testuser:testuser /home/visitors/testuser/.ssh", language="bash")
+st.code("sudo chmod 700 /home/visitors/testuser/.ssh", language="bash")
+st.code("sudo chown testuser:testuser /home/visitors/testuser/.ssh/authorized_keys", language="bash")
+st.code("sudo chmod 600 /home/visitors/testuser/.ssh/authorized_keys", language="bash")
+st.code("sudo systemctl restart sshd", language="bash")
 
 st.divider()
 
-# ════════════════════════════════════════════
-# STEP 16
-# ════════════════════════════════════════════
-st.header("Step 16: Verify All Users")
-st.write("Run the verification script as root:")
-st.code("cd /root/visitors", language="bash")
-st.code("bash verify_users.sh newusers.txt", language="bash")
+# ════════════════════════════════════════════════════════════════
+# GUEST VM SETUP
+# ════════════════════════════════════════════════════════════════
 
-st.write("What the output means:")
-st.write("- **OK** = that check passed")
-st.write("- **WARN: ak empty** = user didn't have a pubkey on the server (this is fine)")
-st.write("- **FAIL** = something is wrong, fix it")
-st.write("- **ALL CHECKS PASSED** at the end = you're done!")
-
-st.divider()
-
-# ════════════════════════════════════════════
-# STEP 17
-# ════════════════════════════════════════════
-st.header("Step 17: Repeat on Guest Machine")
-st.write("The assignment requires users on **both host and guest**. Copy everything to the guest VM.")
-
-st.write("First, find your guest VM's IP address. On the guest, run:")
-st.code("ip addr show", language="bash")
-
-st.write("From the **host**, copy all scripts to the guest:")
-st.code("scp /root/visitors/* root@GUEST_IP:/root/visitors/", language="bash")
-st.warning("⚠️ Replace `GUEST_IP` with your actual guest VM IP address.")
-
-st.write("SSH into the guest:")
-st.code("ssh root@GUEST_IP", language="bash")
-
-st.write("Then on the guest, repeat these steps:")
-st.code("""cd /root/visitors
-
-# Install deps
-pacman -S --needed wget openssh zsh
-
-# Host keys
-ssh-keygen -A
-
-# Enable sshd
-systemctl enable sshd
-systemctl start sshd
-
-# Config
-sed -i 's/^#*PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config
-systemctl restart sshd
-
-# Run main script
-bash add_visitors.sh newusers.txt https://www.cs.fsu.edu/~langley/NEWKEYS/
-
-# Install test key (adjust user0/user1 path)
-cp /home/user0/testkeys/testuser_key.pub /home/visitors/testuser/.ssh/authorized_keys
-chown testuser:testuser /home/visitors/testuser/.ssh/authorized_keys
-chmod 600 /home/visitors/testuser/.ssh/authorized_keys
-
-# Verify
-bash verify_users.sh newusers.txt""", language="bash")
+st.subheader("═══ GUEST VM SETUP ═══")
 
 st.divider()
 
 # ════════════════════════════════════════════
 # STEP 18
 # ════════════════════════════════════════════
-st.header("Step 18: Cleanup (If You Need to Redo)")
-st.write("If something went wrong and you need to start fresh, run as root:")
-st.code("cd /root/visitors", language="bash")
-st.code("bash remove_visitors.sh newusers.txt", language="bash")
+st.header("Step 18: Set Up Guest VM")
+st.write("The assignment requires users on **both host and guest**. Copy the scripts from the host to the guest.")
+st.write("")
+st.write("From the **host** as **user0**:")
+st.code("scp ~/visitors/* user0@GUEST_IP:~/visitors/", language="bash")
+st.warning("⚠️ Replace `GUEST_IP` with your QEMU guest's IP.")
 
-st.write("This removes all users, groups, home dirs, and scratch dirs. Then go back to **Step 13** and re-run.")
+st.write("If scp doesn't work, you can also SSH to the guest and manually re-run steps 2–7 there.")
+st.write("")
+st.write("Then on the **guest**, run the same setup. If the guest has a GUI with paste, paste these. Otherwise type or SSH into the guest from the host and paste:")
+st.code("sudo pacman -S --needed wget openssh zsh", language="bash")
+st.code("sudo ssh-keygen -A", language="bash")
+st.code("sudo systemctl enable sshd", language="bash")
+st.code("sudo systemctl start sshd", language="bash")
+st.code("sudo sed -i 's/^#*PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config", language="bash")
+st.code("sudo systemctl restart sshd", language="bash")
+st.code("cd ~/visitors", language="bash")
+st.code("sudo bash ~/visitors/add_visitors.sh ~/visitors/newusers.txt https://www.cs.fsu.edu/~langley/NEWKEYS/", language="bash")
+
+st.write("Install testuser key on guest too:")
+st.code("sudo cp ~/testkeys/testuser_key.pub /home/visitors/testuser/.ssh/authorized_keys", language="bash")
+st.code("sudo chown testuser:testuser /home/visitors/testuser/.ssh/authorized_keys", language="bash")
+st.code("sudo chmod 600 /home/visitors/testuser/.ssh/authorized_keys", language="bash")
+
+st.write("Verify on guest:")
+st.code("sudo bash ~/visitors/verify_users.sh ~/visitors/newusers.txt", language="bash")
 
 st.divider()
-st.caption("CNT4603 Spring 2026 — Visitor Setup Guide | Arch Linux")
+
+# ════════════════════════════════════════════
+# STEP 19
+# ════════════════════════════════════════════
+st.header("Step 19: Cleanup (If You Need to Redo)")
+st.write("If something went wrong, clean up and start fresh. As **user0**:")
+st.code("sudo bash ~/visitors/remove_visitors.sh ~/visitors/newusers.txt", language="bash")
+st.write("Then go back to **Step 12** and re-run.")
+
+st.divider()
+st.caption("CNT4603 Spring 2026 — Visitor Setup Guide | Arch Linux | QEMU Lab Environment")
